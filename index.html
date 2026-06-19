@@ -404,6 +404,17 @@
       stroke-width: 2.8;
     }
 
+    .marker-favorite-star {
+      position: absolute;
+      top: -10px;
+      left: -9px;
+      color: #ffe28a;
+      font-size: 18px;
+      line-height: 1;
+      text-shadow: 0 1px 1px #7a5b00, 0 0 3px rgba(0, 0, 0, 0.45);
+      pointer-events: none;
+    }
+
     .bike-marker::after {
       content: "";
       position: absolute;
@@ -767,11 +778,12 @@
         .replace(/'/g, "&#039;");
     }
 
-    function createIcon(color) {
+    function createIcon(color, isFavorite = false) {
       return L.divIcon({
         className: "",
         html: `
           <span class="bike-marker ${color}" aria-hidden="true">
+            ${isFavorite ? '<span class="marker-favorite-star">★</span>' : ""}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="5.5" cy="16.5" r="3.5"></circle>
               <circle cx="18.5" cy="16.5" r="3.5"></circle>
@@ -795,7 +807,7 @@
       stations.forEach((station) => {
         if (!Number.isFinite(station.lat) || !Number.isFinite(station.lng)) return;
         const marker = L.marker([station.lat, station.lng], {
-          icon: createIcon(station.color),
+          icon: createIcon(station.color, favoriteStations.has(station.favoriteId)),
           title: station.name
         }).bindPopup(popupHtml(station));
         marker.addTo(markerLayer);
@@ -853,6 +865,10 @@
               favoriteStations.add(station.favoriteId);
             }
             saveFavorites();
+            markers.get(station.id)?.setIcon(createIcon(
+              station.color,
+              favoriteStations.has(station.favoriteId)
+            ));
             renderList(currentStations);
           });
           fragment.appendChild(item);
