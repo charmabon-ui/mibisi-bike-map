@@ -291,21 +291,18 @@
     .station-card {
       width: 100%;
       display: grid;
-      grid-template-columns: 14px minmax(0, 1fr) auto;
+      grid-template-columns: 14px minmax(0, 1fr) auto 34px;
       gap: 10px;
       align-items: start;
       padding: 12px 10px;
       border: 1px solid transparent;
       border-radius: 8px;
       background: transparent;
-      text-align: left;
     }
 
-    .station-card:hover,
-    .station-card:focus-visible {
+    .station-card:hover {
       border-color: #cbd8d2;
       background: #f6faf8;
-      outline: none;
     }
 
     .station-color {
@@ -318,10 +315,29 @@
     }
 
     .station-main {
+      display: block;
       min-width: 0;
+      min-height: 0;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      color: inherit;
+      background: transparent;
+      text-align: left;
+    }
+
+    .station-main:hover {
+      border-color: transparent;
+      background: transparent;
+    }
+
+    .station-main:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 3px;
     }
 
     .station-name {
+      display: block;
       overflow-wrap: anywhere;
       font-size: 14px;
       font-weight: 720;
@@ -329,6 +345,7 @@
     }
 
     .station-meta {
+      display: block;
       margin-top: 5px;
       color: var(--muted);
       font-size: 12px;
@@ -336,10 +353,29 @@
     }
 
     .station-distance {
+      padding-top: 2px;
       color: #35443d;
       font-size: 12px;
       font-weight: 680;
       white-space: nowrap;
+    }
+
+    .favorite-button {
+      width: 34px;
+      min-height: 34px;
+      padding: 0;
+      border-color: transparent;
+      background: transparent;
+      color: #69776f;
+      font-size: 23px;
+      line-height: 1;
+    }
+
+    .favorite-button:hover,
+    .favorite-button.is-favorite {
+      border-color: #d4aa35;
+      background: #fff8df;
+      color: #a66b00;
     }
 
     #map {
@@ -498,6 +534,7 @@
     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script>
     const ENDPOINT = "https://www.mibisivalencia.es/mapa/puntos.php";
+    const FAVORITES_KEY = "mibisi-favorite-stations";
     const PORT_SAPLAYA = { lat: 39.512305, lng: -0.320857 };
     const stationList = document.querySelector("#stationList");
     const statusEl = document.querySelector("#status");
@@ -514,6 +551,20 @@
     let hasCenteredOnUser = false;
     let currentStations = [];
     let userLocation = null;
+    const favoriteStations = loadFavorites();
+
+    function loadFavorites() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]");
+        return new Set(Array.isArray(saved) ? saved : []);
+      } catch {
+        return new Set();
+      }
+    }
+
+    function saveFavorites() {
+      localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favoriteStations]));
+    }
 
     const map = L.map("map", {
       center: [PORT_SAPLAYA.lat, PORT_SAPLAYA.lng],
@@ -675,6 +726,7 @@
       const totalDocks = parseNumber("Nodos Totales", raw.html);
       const station = {
         id: `${raw.nombre || "station"}-${lat}-${lng}-${index}`,
+        favoriteId: `${lat.toFixed(6)},${lng.toFixed(6)}`,
         name: raw.nombre || "Unnamed station",
         lat,
         lng,
@@ -763,28 +815,45 @@
       const fragment = document.createDocumentFragment();
       const orderedStations = stations.slice();
 
-      if (userLocation) {
-        orderedStations.sort((a, b) => a.distanceKm - b.distanceKm);
-      }
+      orderedStations.sort((a, b) => {
+        const favoriteOrder = Number(favoriteStations.has(b.favoriteId))
+          - Number(favoriteStations.has(a.favoriteId));
+        if (favoriteOrder) return favoriteOrder;
+        if (userLocation) return a.distanceKm - b.distanceKm;
+        return 0;
+      });
 
       orderedStations
         .forEach((station) => {
-          const item = document.createElement("button");
-          item.type = "button";
+          const isFavorite = favoriteStations.has(station.favoriteId);
+          const item = document.createElement("div");
           item.className = "station-card";
           item.innerHTML = `
             <span class="station-color ${station.color}" aria-hidden="true"></span>
-            <span class="station-main">
+            <button type="button" class="station-main">
               <span class="station-name">${escapeHtml(station.name)}</span>
               <span class="station-meta">${valueOrDash(station.availableBikes)} bikes / ${valueOrDash(station.freeDocks)} free / ${valueOrDash(station.totalDocks)} docks</span>
-            </span>
+            </button>
             ${Number.isFinite(station.distanceKm)
               ? `<span class="station-distance">${station.distanceKm.toFixed(1)} km</span>`
               : ""}
+            <button type="button" class="favorite-button${isFavorite ? " is-favorite" : ""}"
+              aria-label="${isFavorite ? "Remove from" : "Add to"} favorites: ${escapeHtml(station.name)}"
+              title="${isFavorite ? "Remove from favorites" : "Add to favorites"}"
+              aria-pressed="${isFavorite}">${isFavorite ? "★" : "☆"}</button>
           `;
-          item.addEventListener("click", () => {
+          item.querySelector(".station-main").addEventListener("click", () => {
             map.setView([station.lat, station.lng], 16);
             markers.get(station.id)?.openPopup();
+          });
+          item.querySelector(".favorite-button").addEventListener("click", () => {
+            if (favoriteStations.has(station.favoriteId)) {
+              favoriteStations.delete(station.favoriteId);
+            } else {
+              favoriteStations.add(station.favoriteId);
+            }
+            saveFavorites();
+            renderList(currentStations);
           });
           fragment.appendChild(item);
         });
