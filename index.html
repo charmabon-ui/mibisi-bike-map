@@ -194,6 +194,11 @@
       align-items: center;
     }
 
+    .control-actions {
+      display: flex;
+      gap: 8px;
+    }
+
     .status {
       min-width: 0;
       color: var(--muted);
@@ -227,6 +232,23 @@
     button:disabled {
       cursor: wait;
       opacity: 0.7;
+    }
+
+    .location-message {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .user-location-marker {
+      width: 22px;
+      height: 22px;
+      box-sizing: border-box;
+      border: 4px solid #ffffff;
+      border-radius: 50%;
+      background: #1267b3;
+      box-shadow: 0 0 0 2px #1267b3, 0 2px 8px rgba(0, 0, 0, 0.35);
     }
 
     .legend {
@@ -450,8 +472,12 @@
         <h1>MIBISI Bike Stations</h1>
         <div class="controls">
           <div class="status" id="status">Loading stations...</div>
-          <button type="button" id="refreshButton">Refresh</button>
+          <div class="control-actions">
+            <button type="button" id="locationButton">My location</button>
+            <button type="button" id="refreshButton">Refresh</button>
+          </div>
         </div>
+        <div class="location-message hidden" id="locationMessage" aria-live="polite"></div>
         <div class="error hidden" id="errorBox"></div>
       </div>
 
@@ -477,9 +503,17 @@
     const statusEl = document.querySelector("#status");
     const errorBox = document.querySelector("#errorBox");
     const refreshButton = document.querySelector("#refreshButton");
+    const locationButton = document.querySelector("#locationButton");
+    const locationMessage = document.querySelector("#locationMessage");
 
     const markers = new Map();
     const markerLayer = L.layerGroup();
+    let userMarker = null;
+    let accuracyCircle = null;
+    let locationWatchId = null;
+    let hasCenteredOnUser = false;
+    let currentStations = [];
+    let userLocation = null;
 
     const map = L.map("map", {
       center: [PORT_SAPLAYA.lat, PORT_SAPLAYA.lng],
@@ -493,6 +527,104 @@
     }).addTo(map);
 
     markerLayer.addTo(map);
+
+    const userLocationIcon = L.divIcon({
+      className: "",
+      html: '<div class="user-location-marker" aria-hidden="true"></div>',
+      iconSize: [22, 22],
+      iconAnchor: [11, 11],
+      popupAnchor: [0, -13]
+    });
+
+    function setLocationMessage(message) {
+      locationMessage.textContent = message;
+      locationMessage.classList.toggle("hidden", !message);
+    }
+
+    function updateUserLocation(position) {
+      const latLng = [position.coords.latitude, position.coords.longitude];
+      const accuracy = Math.round(position.coords.accuracy);
+      userLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
+
+      currentStations.forEach((station) => {
+        station.distanceKm = haversineKm(userLocation, station);
+      });
+      renderList(currentStations);
+
+      if (!userMarker) {
+        userMarker = L.marker(latLng, {
+          icon: userLocationIcon,
+          zIndexOffset: 1000,
+          title: "Your location"
+        }).addTo(map);
+      } else {
+        userMarker.setLatLng(latLng);
+      }
+
+      userMarker.bindPopup(`<strong>You are here</strong><br>Accuracy: about ${accuracy} m`);
+
+      if (!accuracyCircle) {
+        accuracyCircle = L.circle(latLng, {
+          radius: position.coords.accuracy,
+          color: "#1267b3",
+          weight: 1,
+          fillColor: "#58a9e6",
+          fillOpacity: 0.14,
+          interactive: false
+        }).addTo(map);
+      } else {
+        accuracyCircle.setLatLng(latLng).setRadius(position.coords.accuracy);
+      }
+
+      locationButton.disabled = false;
+      locationButton.textContent = "My location";
+      setLocationMessage(`Location found (accuracy about ${accuracy} m).`);
+
+      if (!hasCenteredOnUser) {
+        map.setView(latLng, Math.max(map.getZoom(), 15));
+        userMarker.openPopup();
+        hasCenteredOnUser = true;
+      }
+    }
+
+    function handleLocationError(error) {
+      const messages = {
+        1: "Location access was denied. Allow location access in your browser settings and try again.",
+        2: "Your location is currently unavailable.",
+        3: "Finding your location took too long. Please try again."
+      };
+
+      locationButton.disabled = false;
+      locationButton.textContent = "My location";
+      setLocationMessage(messages[error.code] || "Your location could not be determined.");
+
+      if (locationWatchId !== null) {
+        navigator.geolocation.clearWatch(locationWatchId);
+        locationWatchId = null;
+      }
+    }
+
+    function locateUser() {
+      if (userMarker) {
+        map.setView(userMarker.getLatLng(), Math.max(map.getZoom(), 15));
+        userMarker.openPopup();
+        return;
+      }
+
+      if (!navigator.geolocation) {
+        setLocationMessage("Geolocation is not supported by this browser.");
+        return;
+      }
+
+      locationButton.disabled = true;
+      locationButton.textContent = "Locating...";
+      setLocationMessage("Waiting for location permission...");
+      locationWatchId = navigator.geolocation.watchPosition(updateUserLocation, handleLocationError, {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 30000
+      });
+    }
 
     function stripHtml(html) {
       const template = document.createElement("template");
@@ -552,7 +684,7 @@
         googleMapsUrl: extractGoogleMapsLink(raw.html, lat, lng)
       };
       station.color = markerColor(station.availableBikes);
-      station.distanceKm = haversineKm(PORT_SAPLAYA, station);
+      station.distanceKm = userLocation ? haversineKm(userLocation, station) : null;
       return station;
     }
 
@@ -629,10 +761,13 @@
     function renderList(stations) {
       stationList.replaceChildren();
       const fragment = document.createDocumentFragment();
+      const orderedStations = stations.slice();
 
-      stations
-        .slice()
-        .sort((a, b) => a.distanceKm - b.distanceKm)
+      if (userLocation) {
+        orderedStations.sort((a, b) => a.distanceKm - b.distanceKm);
+      }
+
+      orderedStations
         .forEach((station) => {
           const item = document.createElement("button");
           item.type = "button";
@@ -643,7 +778,9 @@
               <span class="station-name">${escapeHtml(station.name)}</span>
               <span class="station-meta">${valueOrDash(station.availableBikes)} bikes / ${valueOrDash(station.freeDocks)} free / ${valueOrDash(station.totalDocks)} docks</span>
             </span>
-            <span class="station-distance">${station.distanceKm.toFixed(1)} km</span>
+            ${Number.isFinite(station.distanceKm)
+              ? `<span class="station-distance">${station.distanceKm.toFixed(1)} km</span>`
+              : ""}
           `;
           item.addEventListener("click", () => {
             map.setView([station.lat, station.lng], 16);
@@ -713,6 +850,7 @@
           .map(normalizeStation)
           .filter((station) => Number.isFinite(station.lat) && Number.isFinite(station.lng));
 
+        currentStations = stations;
         renderMarkers(stations);
         renderList(stations);
         const sourceLabel = source === "direct" ? "" : ` via ${source}`;
@@ -729,6 +867,7 @@
     }
 
     refreshButton.addEventListener("click", loadStations);
+    locationButton.addEventListener("click", locateUser);
     loadStations();
   </script>
 </body>
