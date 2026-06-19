@@ -1,0 +1,12 @@
+{
+  "name": "mibisi-bike-map",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Interactive MIBISI bike station map",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

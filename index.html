@@ -1,0 +1,735 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MIBISI Bike Stations</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    :root {
+      --bg: #f5f7f3;
+      --panel: #ffffff;
+      --ink: #17211c;
+      --muted: #65746c;
+      --line: #d9e0da;
+      --green: #188a4d;
+      --orange: #d78100;
+      --red: #c9352b;
+      --gray: #727a80;
+      --focus: #0b6b7d;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+    }
+
+    .leaflet-container {
+      position: relative;
+      overflow: hidden;
+      outline-offset: 1px;
+      touch-action: none;
+    }
+
+    .leaflet-pane,
+    .leaflet-tile,
+    .leaflet-marker-icon,
+    .leaflet-marker-shadow,
+    .leaflet-tile-container,
+    .leaflet-pane > svg,
+    .leaflet-pane > canvas,
+    .leaflet-zoom-box,
+    .leaflet-image-layer,
+    .leaflet-layer {
+      position: absolute;
+      left: 0;
+      top: 0;
+    }
+
+    .leaflet-tile,
+    .leaflet-marker-icon,
+    .leaflet-marker-shadow {
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    .leaflet-tile {
+      width: 256px;
+      height: 256px;
+    }
+
+    .leaflet-pane { z-index: 400; }
+    .leaflet-tile-pane { z-index: 200; }
+    .leaflet-overlay-pane { z-index: 400; }
+    .leaflet-shadow-pane { z-index: 500; }
+    .leaflet-marker-pane { z-index: 600; }
+    .leaflet-tooltip-pane { z-index: 650; }
+    .leaflet-popup-pane { z-index: 700; }
+
+    .leaflet-control {
+      position: relative;
+      z-index: 800;
+      pointer-events: auto;
+      float: left;
+      clear: both;
+    }
+
+    .leaflet-top,
+    .leaflet-bottom {
+      position: absolute;
+      z-index: 1000;
+      pointer-events: none;
+    }
+
+    .leaflet-top { top: 0; }
+    .leaflet-right { right: 0; }
+    .leaflet-bottom { bottom: 0; }
+    .leaflet-left { left: 0; }
+    .leaflet-right .leaflet-control { float: right; }
+    .leaflet-top .leaflet-control { margin-top: 10px; }
+    .leaflet-bottom .leaflet-control { margin-bottom: 10px; }
+    .leaflet-left .leaflet-control { margin-left: 10px; }
+    .leaflet-right .leaflet-control { margin-right: 10px; }
+
+    .leaflet-control-zoom {
+      border: 2px solid rgba(0, 0, 0, 0.2);
+      border-radius: 4px;
+      background: #fff;
+    }
+
+    .leaflet-control-zoom a {
+      display: block;
+      width: 30px;
+      height: 30px;
+      color: #111;
+      background: #fff;
+      border-bottom: 1px solid #ccc;
+      text-align: center;
+      text-decoration: none;
+      font: 700 18px/30px Arial, sans-serif;
+    }
+
+    .leaflet-control-zoom a:last-child {
+      border-bottom: 0;
+    }
+
+    .leaflet-popup {
+      position: absolute;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .leaflet-popup-content-wrapper {
+      padding: 1px;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 3px 14px rgba(0, 0, 0, 0.4);
+      text-align: left;
+    }
+
+    .leaflet-popup-content {
+      margin: 13px 19px;
+      line-height: 1.4;
+    }
+
+    .leaflet-popup-tip-container {
+      position: absolute;
+      left: 50%;
+      width: 40px;
+      height: 20px;
+      margin-left: -20px;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    .leaflet-popup-tip {
+      width: 17px;
+      height: 17px;
+      margin: -10px auto 0;
+      padding: 1px;
+      transform: rotate(45deg);
+      background: #fff;
+      box-shadow: 0 3px 14px rgba(0, 0, 0, 0.4);
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
+      height: 100vh;
+      min-height: 560px;
+    }
+
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      border-right: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    .topbar {
+      padding: 18px 18px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: 22px;
+      line-height: 1.15;
+      font-weight: 760;
+      letter-spacing: 0;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .status {
+      min-width: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    button {
+      min-height: 40px;
+      border: 1px solid #a9b7af;
+      border-radius: 7px;
+      padding: 0 14px;
+      color: #10231c;
+      background: #fafdff;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 680;
+      cursor: pointer;
+      transition: background 150ms ease, border-color 150ms ease, transform 120ms ease;
+    }
+
+    button:hover {
+      border-color: var(--focus);
+      background: #eef8f8;
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    button:disabled {
+      cursor: wait;
+      opacity: 0.7;
+    }
+
+    .legend {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px 12px;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 11px;
+      height: 11px;
+      flex: 0 0 11px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.16);
+    }
+
+    .dot.green { background: var(--green); }
+    .dot.orange { background: var(--orange); }
+    .dot.red { background: var(--red); }
+    .dot.gray { background: var(--gray); }
+
+    .station-list {
+      overflow: auto;
+      padding: 8px;
+    }
+
+    .station-card {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 14px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: start;
+      padding: 12px 10px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      text-align: left;
+    }
+
+    .station-card:hover,
+    .station-card:focus-visible {
+      border-color: #cbd8d2;
+      background: #f6faf8;
+      outline: none;
+    }
+
+    .station-color {
+      width: 12px;
+      height: 12px;
+      margin-top: 4px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
+    }
+
+    .station-main {
+      min-width: 0;
+    }
+
+    .station-name {
+      overflow-wrap: anywhere;
+      font-size: 14px;
+      font-weight: 720;
+      line-height: 1.25;
+    }
+
+    .station-meta {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .station-distance {
+      color: #35443d;
+      font-size: 12px;
+      font-weight: 680;
+      white-space: nowrap;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+      min-height: 420px;
+      background: #dde8e3;
+    }
+
+    .bike-marker {
+      position: relative;
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      border: 3px solid #ffffff;
+      border-radius: 8px;
+      color: #ffffff;
+      background: #1267b3;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.36);
+    }
+
+    .bike-marker svg {
+      width: 24px;
+      height: 24px;
+      stroke-width: 2.8;
+    }
+
+    .bike-marker::after {
+      content: "";
+      position: absolute;
+      right: -5px;
+      bottom: -5px;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #ffffff;
+      border-radius: 50%;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+    }
+
+    .bike-marker.green::after,
+    .station-color.green { background: var(--green); }
+
+    .bike-marker.orange::after,
+    .station-color.orange { background: var(--orange); }
+
+    .bike-marker.red::after,
+    .station-color.red { background: var(--red); }
+
+    .bike-marker.gray::after,
+    .station-color.gray { background: var(--gray); }
+
+    .popup {
+      min-width: 190px;
+    }
+
+    .popup h2 {
+      margin: 0 0 8px;
+      font-size: 15px;
+      line-height: 1.25;
+    }
+
+    .popup dl {
+      display: grid;
+      grid-template-columns: auto auto;
+      gap: 4px 14px;
+      margin: 0 0 10px;
+      font-size: 13px;
+    }
+
+    .popup dt {
+      color: var(--muted);
+    }
+
+    .popup dd {
+      margin: 0;
+      font-weight: 720;
+      text-align: right;
+    }
+
+    .popup a {
+      color: #0b6577;
+      font-weight: 720;
+      text-decoration: none;
+    }
+
+    .popup a:hover {
+      text-decoration: underline;
+    }
+
+    .error {
+      margin: 10px 18px 0;
+      padding: 10px 12px;
+      border: 1px solid #efb5ad;
+      border-radius: 8px;
+      color: #84241c;
+      background: #fff4f2;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    @media (max-width: 760px) {
+      .app {
+        grid-template-columns: 1fr;
+        grid-template-rows: 56vh 44vh;
+        height: 100dvh;
+        min-height: 680px;
+      }
+
+      .sidebar {
+        grid-row: 2;
+        border-top: 1px solid var(--line);
+        border-right: 0;
+      }
+
+      #map {
+        grid-row: 1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <aside class="sidebar" aria-label="MIBISI stations">
+      <div class="topbar">
+        <h1>MIBISI Bike Stations</h1>
+        <div class="controls">
+          <div class="status" id="status">Loading stations...</div>
+          <button type="button" id="refreshButton">Refresh</button>
+        </div>
+        <div class="error hidden" id="errorBox"></div>
+      </div>
+
+      <div class="legend" aria-label="Marker legend">
+        <span class="legend-item"><span class="dot red"></span>0 bikes</span>
+        <span class="legend-item"><span class="dot orange"></span>1-3 bikes</span>
+        <span class="legend-item"><span class="dot green"></span>4+ bikes</span>
+        <span class="legend-item"><span class="dot gray"></span>Unknown</span>
+      </div>
+
+      <div class="station-list" id="stationList" aria-live="polite"></div>
+    </aside>
+
+    <div id="map" aria-label="Map of MIBISI stations"></div>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script>
+    const ENDPOINT = "https://www.mibisivalencia.es/mapa/puntos.php";
+    const PORT_SAPLAYA = { lat: 39.512305, lng: -0.320857 };
+    const stationList = document.querySelector("#stationList");
+    const statusEl = document.querySelector("#status");
+    const errorBox = document.querySelector("#errorBox");
+    const refreshButton = document.querySelector("#refreshButton");
+
+    const markers = new Map();
+    const markerLayer = L.layerGroup();
+
+    const map = L.map("map", {
+      center: [PORT_SAPLAYA.lat, PORT_SAPLAYA.lng],
+      zoom: 13,
+      zoomControl: true
+    });
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    markerLayer.addTo(map);
+
+    function stripHtml(html) {
+      const template = document.createElement("template");
+      template.innerHTML = html || "";
+      return template.content.textContent || "";
+    }
+
+    function parseNumber(label, html) {
+      const text = stripHtml(html).replace(/\s+/g, " ");
+      const match = text.match(new RegExp(`${label}\\s*=\\s*(\\d+)`, "i"));
+      return match ? Number(match[1]) : null;
+    }
+
+    function extractGoogleMapsLink(html, lat, lng) {
+      const template = document.createElement("template");
+      template.innerHTML = html || "";
+      const link = template.content.querySelector("a[href*='google']");
+      return link?.href || `https://www.google.com/maps/place/${lat},${lng}`;
+    }
+
+    function markerColor(availableBikes) {
+      if (!Number.isFinite(availableBikes)) return "gray";
+      if (availableBikes === 0) return "red";
+      if (availableBikes <= 3) return "orange";
+      return "green";
+    }
+
+    function haversineKm(from, to) {
+      const earthRadiusKm = 6371;
+      const dLat = toRadians(to.lat - from.lat);
+      const dLng = toRadians(to.lng - from.lng);
+      const lat1 = toRadians(from.lat);
+      const lat2 = toRadians(to.lat);
+      const a = Math.sin(dLat / 2) ** 2
+        + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+      return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function toRadians(degrees) {
+      return degrees * Math.PI / 180;
+    }
+
+    function normalizeStation(raw, index) {
+      const lat = Number(raw.lat);
+      const lng = Number(raw.lng);
+      const availableBikes = parseNumber("Bicicletas disponibles", raw.html);
+      const freeDocks = parseNumber("Huecos libres", raw.html);
+      const totalDocks = parseNumber("Nodos Totales", raw.html);
+      const station = {
+        id: `${raw.nombre || "station"}-${lat}-${lng}-${index}`,
+        name: raw.nombre || "Unnamed station",
+        lat,
+        lng,
+        availableBikes,
+        freeDocks,
+        totalDocks,
+        googleMapsUrl: extractGoogleMapsLink(raw.html, lat, lng)
+      };
+      station.color = markerColor(station.availableBikes);
+      station.distanceKm = haversineKm(PORT_SAPLAYA, station);
+      return station;
+    }
+
+    function valueOrDash(value) {
+      return Number.isFinite(value) ? value : "-";
+    }
+
+    function popupHtml(station) {
+      return `
+        <div class="popup">
+          <h2>${escapeHtml(station.name)}</h2>
+          <dl>
+            <dt>Total docks</dt><dd>${valueOrDash(station.totalDocks)}</dd>
+            <dt>Available bikes</dt><dd>${valueOrDash(station.availableBikes)}</dd>
+            <dt>Free docks</dt><dd>${valueOrDash(station.freeDocks)}</dd>
+          </dl>
+          <a href="${station.googleMapsUrl}" target="_blank" rel="noopener noreferrer">Open in Google Maps</a>
+        </div>
+      `;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function createIcon(color) {
+      return L.divIcon({
+        className: "",
+        html: `
+          <span class="bike-marker ${color}" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="5.5" cy="16.5" r="3.5"></circle>
+              <circle cx="18.5" cy="16.5" r="3.5"></circle>
+              <path d="M8.5 16.5h4l3-6h-5l-2 6Z"></path>
+              <path d="M13 16.5 9.5 9.5"></path>
+              <path d="M15.5 10.5h2"></path>
+              <path d="M9.5 9.5H7.5"></path>
+            </svg>
+          </span>
+        `,
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+        popupAnchor: [0, -18]
+      });
+    }
+
+    function renderMarkers(stations) {
+      markerLayer.clearLayers();
+      markers.clear();
+
+      stations.forEach((station) => {
+        if (!Number.isFinite(station.lat) || !Number.isFinite(station.lng)) return;
+        const marker = L.marker([station.lat, station.lng], {
+          icon: createIcon(station.color),
+          title: station.name
+        }).bindPopup(popupHtml(station));
+        marker.addTo(markerLayer);
+        markers.set(station.id, marker);
+      });
+
+      if (stations.length) {
+        const bounds = L.latLngBounds(stations.map((station) => [station.lat, station.lng]));
+        map.fitBounds(bounds.pad(0.12), { maxZoom: 14 });
+      } else {
+        map.setView([PORT_SAPLAYA.lat, PORT_SAPLAYA.lng], 13);
+      }
+    }
+
+    function renderList(stations) {
+      stationList.replaceChildren();
+      const fragment = document.createDocumentFragment();
+
+      stations
+        .slice()
+        .sort((a, b) => a.distanceKm - b.distanceKm)
+        .forEach((station) => {
+          const item = document.createElement("button");
+          item.type = "button";
+          item.className = "station-card";
+          item.innerHTML = `
+            <span class="station-color ${station.color}" aria-hidden="true"></span>
+            <span class="station-main">
+              <span class="station-name">${escapeHtml(station.name)}</span>
+              <span class="station-meta">${valueOrDash(station.availableBikes)} bikes / ${valueOrDash(station.freeDocks)} free / ${valueOrDash(station.totalDocks)} docks</span>
+            </span>
+            <span class="station-distance">${station.distanceKm.toFixed(1)} km</span>
+          `;
+          item.addEventListener("click", () => {
+            map.setView([station.lat, station.lng], 16);
+            markers.get(station.id)?.openPopup();
+          });
+          fragment.appendChild(item);
+        });
+
+      stationList.appendChild(fragment);
+    }
+
+    function setLoading(isLoading) {
+      refreshButton.disabled = isLoading;
+      refreshButton.textContent = isLoading ? "Loading" : "Refresh";
+    }
+
+    function setError(message) {
+      errorBox.textContent = message;
+      errorBox.classList.toggle("hidden", !message);
+    }
+
+    async function fetchStations() {
+      const cacheBuster = Date.now();
+      const directUrl = `${ENDPOINT}?t=${cacheBuster}`;
+      const sameOriginUrl = `/stations?t=${cacheBuster}`;
+
+      if (location.protocol.startsWith("http")) {
+        try {
+          const localResponse = await fetch(sameOriginUrl, { cache: "no-store" });
+          if (localResponse.ok) {
+            return {
+              stations: await localResponse.json(),
+              source: "local proxy"
+            };
+          }
+        } catch (localError) {
+          // Static hosts will not have /stations; fall through to the live endpoint.
+        }
+      }
+
+      try {
+        const response = await fetch(directUrl, { cache: "no-store" });
+        if (!response.ok) throw new Error(`Request failed with HTTP ${response.status}`);
+        return {
+          stations: await response.json(),
+          source: "direct"
+        };
+      } catch (directError) {
+        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`;
+        const response = await fetch(proxyUrl, { cache: "no-store" });
+        if (!response.ok) throw directError;
+        return {
+          stations: await response.json(),
+          source: "proxy"
+        };
+      }
+    }
+
+    async function loadStations() {
+      setLoading(true);
+      setError("");
+      statusEl.textContent = "Loading stations...";
+
+      try {
+        const { stations: rawStations, source } = await fetchStations();
+        const stations = rawStations
+          .map(normalizeStation)
+          .filter((station) => Number.isFinite(station.lat) && Number.isFinite(station.lng));
+
+        renderMarkers(stations);
+        renderList(stations);
+        const sourceLabel = source === "direct" ? "" : ` via ${source}`;
+        statusEl.textContent = `${stations.length} stations loaded${sourceLabel} / ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+      } catch (error) {
+        console.error(error);
+        markerLayer.clearLayers();
+        stationList.replaceChildren();
+        statusEl.textContent = "Stations could not be loaded.";
+        setError("The live MIBISI endpoint could not be loaded. For local use, run the included server.js file so /stations can proxy the endpoint without browser CORS blocking it.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    refreshButton.addEventListener("click", loadStations);
+    loadStations();
+  </script>
+</body>
+</html>
